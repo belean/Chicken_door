@@ -90,15 +90,24 @@ def current_status(file_name, state=None, month=None):
             fw.write(','.join(status))
     return (status[0], status[1]) #Returns (current_timing, door status)
 
-def adjusted_sleep(lfp, time_now, month):
+def adjusted_sleep(lfp, time_now, month, direction):
     #Check for new instructions
     schedule= config.TIMINGS2[month] #tuple (name,timepoint, seconds,timepoint, seconds) for the month we are in 
     #now_timing= (time_now[3]+round(time_now[4]/60,1),) #Creating a tuple with one item
     this_morning=(time_now[0], time_now[1], time_now[2], int(schedule[1]), int(round(schedule[1]-int(schedule[1]),1)*60), time_now[5], time_now[6], time_now[7])
-    next_timing=utime.mktime(this_morning)+schedule[2]-utime.mktime(time_now)
-    log_me(lfp,"this_morning: {} and time_now: {} and schedule:{}".format(this_morning, time_now, schedule[0]) )
-    if next_timing < 0: #We're closed
-        next_timing=schedule[4]+next_timing
+    this_evening=(time_now[0], time_now[1], time_now[2], int(schedule[3]), int(round(schedule[3]-int(schedule[3]),1)*60), time_now[5], time_now[6], time_now[7])
+    time_now_secs= utime.mktime(time_now)
+    this_morning_secs = utime.mktime(this_morning)
+    this_evening_secs= utime.mktime(this_evening)
+    log_me(lfp,"time_now_secs:{} this_morning_secs:{} this_evening_secs:{}".format(time_now_secs, this_morning_secs, this_evening_secs))
+    if  time_now_secs < this_morning_secs:
+        next_timing= this_morning_secs - time_now_secs + schedule[2] if direction is 'Opened' else this_morning_secs - time_now_secs
+    elif time_now_secs >= this_morning_secs and time_now_secs < this_evening_secs:
+        next_timing = this_evening_secs - time_now_secs if direction is 'Opened' else this_evening_secs - time_now_secs + schedule[4]
+    else:
+        next_timing = schedule[4] - (time_now_secs - this_evening_secs) + schedule[2] if direction is 'Opened' else schedule[4]- (time_now_secs - this_evening_secs) 
+
+    log_me(lfp,"Direction:{} and this_morning: {} and time_now: {} and schedule:{}".format(direction, this_morning, time_now, schedule[0]) )
     return next_timing
 
 def calculate_sleep_time(lfp, direction, time_now=None):
@@ -106,10 +115,10 @@ def calculate_sleep_time(lfp, direction, time_now=None):
 
     if time_now: #We are either reseted or sunday at closing
         status=current_status(config.FILENAME)
-        month=int(status[0])
+        month=int(status[0]) #Reading from file
 
-        sleep_until= adjusted_sleep(lfp, time_now, month) #Get the time from now to the next open/close event
-        log_me(lfp,"Sleeping after adjustment for {sleep} seconds".format(sleep=sleep_until) )
+        sleep_until= adjusted_sleep(lfp, time_now, month, direction) #Get the time from now to the next open/close event
+        log_me(lfp,"Sleeping after adjustment for {sleep} seconds".format(sleep=sleep_until),1 )
         
         if (time_now[6]==6 and time_now[2] < 8 and direction is 'Closed'): #Mon=0..Sun=6
             #write new timing to file
@@ -125,14 +134,12 @@ def calculate_sleep_time(lfp, direction, time_now=None):
 
     return sleep_until
     
-def log_me(lfp, message):
+def log_me(lfp, message, log=0):
     tm=get_local_time()
     tm_str= '-'.join(map(str, tm[0:3]))+'T'+':'.join(map(str, tm[3:6]))
     if is_debug():
         print('@{}: {}\n'.format(tm_str, message))
-        lfp.seek(0,2) #End of file
-        lfp.write('@{}: {}\n'.format(tm_str, message))
-    else:
+    elif log >= config.LOGLEVEL:
         lfp.seek(0,2) #End of file
         lfp.write('@{}: {}\n'.format(tm_str, message))
 
@@ -156,9 +163,9 @@ def send_logfile(lfp):
     response = urequests.post(config.WEBHOOK_URL,
                               json={'value1': reason})
     if response is not None and response.status_code < 400:
-        log_me(lfp,'Webhook invoked')
+        log_me(lfp,'Webhook invoked',1)
     else:
-        log_me(lfp, 'Webhook failed')
+        log_me(lfp, 'Webhook failed',1)
         raise RuntimeError('Webhook failed')
 
 
@@ -171,20 +178,22 @@ def deepsleep(seconds):
 
 def run_gate(lfp, next_state):
     #Initialize
-    log_me(lfp, "starting motor! and {}".format(next_state))
+    log_me(lfp, "starting motor! and {}".format(next_state),1)
     pin_motor = machine.Pin(config.MOTOR_PIN, machine.Pin.OUT)
     pin_dir= machine.Pin(config.MOTOR_DIR, machine.Pin.OUT) #Rotation direction
     pwm_motor = machine.PWM(pin_motor)
     pwm_motor.freq(config.PWM_FREQ)
- 
+    
+    my_door_time = (config.DOOR_TIME-40) if is_debug() else config.DOOR_TIME
+
     if next_state is 'Closed':
         pin_dir.off() #Closing
         pwm_motor.duty(config.PWM_DUTY)
-        utime.sleep(config.DOOR_TIME-6)
+        utime.sleep(my_door_time-6)
     else:
         pin_dir.on() #Opening
         pwm_motor.duty(config.PWM_DUTY)
-        utime.sleep(config.DOOR_TIME)
+        utime.sleep(my_door_time)
 
     pwm_motor.duty(768)
     utime.sleep(1)
@@ -197,14 +206,28 @@ def run(tm=None):
     sleep_seconds=0
     try:
         lfp=open(config.LOGFILE, 'r+') #Open log file
-        log_me(lfp, "Wakes up and run()")
+        log_me(lfp, "Wakes up and run()",1)
         time_now=tm if tm else get_local_time() #Set to local time if no other time provided
         #Check current status 
         status= current_status(config.FILENAME)
-        log_me(lfp, "Current status: {}".format(status))
+        log_me(lfp, "Current status: {}".format(status),1)
         next_state= 'Opened' if status[1] is 'Closed' else 'Closed' #Binary states
 
-        if machine.reset_cause() == machine.DEEPSLEEP_RESET: #Wake up from deepsleep
+        if machine.reset_cause() in [ machine.DEEPSLEEP_RESET, machine.PWRON_RESET, machine.HARD_RESET, 
+                                    machine.WDT_RESET, machine.SOFT_RESET ]: #We are resetted or first started
+            connect_wifi(lfp)
+            set_time()
+            send_logfile(lfp)  #Send log
+            lfp=rename_file(lfp)
+            #Open the door if closed
+            #if next_state is 'Opened': #Run gate up if closed
+            run_gate(lfp, next_state)
+            current_status(config.FILENAME, next_state) #Set new state in file only if successfully run_gate()
+            #Sleep to next scheduled event
+            sleep_seconds= calculate_sleep_time(lfp, next_state, get_local_time())
+            #seconds=sleep_until(lfp, next_state, get_local_time())
+            
+        else: #Wake up from deepsleep
             temperature, humidity = get_temperature_and_humidity()
             log_me(lfp, 'Temperature = {temperature}, Humidity = {humidity}'.format(
             temperature=temperature, humidity=humidity))
@@ -220,21 +243,9 @@ def run(tm=None):
                 sleep_seconds= calculate_sleep_time(lfp, next_state, get_local_time())
 
             sleep_seconds= calculate_sleep_time(lfp, next_state)
-        else: #We are resetted or first started
-            connect_wifi(lfp)
-            set_time()
-            send_logfile(lfp)  #Send log
-            lfp=rename_file(lfp)
-            #Open the door if closed
-            if next_state is 'Opened': #Run gate up if closed
-                run_gate(lfp, next_state)
-                current_status(config.FILENAME, next_state) #Set new state in file only if successfully run_gate()
-        
-            sleep_seconds= calculate_sleep_time(lfp, next_state, get_local_time())
-            #seconds=sleep_until(lfp, next_state, get_local_time())
     except Exception as exc:
         import sys
-        log_me(lfp,"Exception: {}".format(exc))
+        log_me(lfp, "Exception: {}".format(exc), 5)
         sys.print_exception(exc, lfp)
         connect_wifi(lfp)
         send_logfile(lfp)

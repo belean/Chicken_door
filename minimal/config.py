@@ -13,9 +13,10 @@ MOTOR_PIN= 5 #D1
 MOTOR_DIR= 0 #D3
 PWM_DUTY= 1023
 PWM_FREQ=50
-DOOR_TIME= 11 #51 #45 #40
+DOOR_TIME= 55 #45 #40
 FILENAME= 'door_state.txt'
 LOGFILE= 'weekly_log.txt'
+LOGLEVEL=1
 WEEK_DAYS= ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
             #open, close
 TIMINGS=  ( (7.8, 33000, 53400), #dec-feb
