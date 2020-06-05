@@ -169,11 +169,22 @@ def send_logfile(lfp):
         raise RuntimeError('Webhook failed')
 
 
-def deepsleep(seconds):
+def deepsleep(seconds=None):
     #log_me(lfp, 'Going into deepsleep for {seconds} seconds...'.format(seconds=seconds))
+    #Needs to keep track of max sleep time ~71 min
     rtc = machine.RTC()
+    if seconds: #We are called for the first time
+        rtc.memory(b'{}'.format(seconds))
+    else:
+        time_to_sleep=rtc.memory(str(int(rtc.memory())-config.DEEP_SLEEP)) #We already slept for config.DEEP_SLEEP
+
+    if time_to_sleep < config.DEEP_SLEEP:
+        rtc.memory(b'')
+    else:
+        time_to_sleep=config.DEEP_SLEEP
+
     rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
-    rtc.alarm(rtc.ALARM0, seconds * 1000)
+    rtc.alarm(rtc.ALARM0, time_to_sleep * 1000)
     machine.deepsleep()
 
 def run_gate(lfp, next_state):
@@ -200,10 +211,22 @@ def run_gate(lfp, next_state):
     pwm_motor.deinit()
     return True
 
+def stop_gate(lfp):
+    log_me(lfp, "Stopping motor!",1)
+    pin_motor = machine.Pin(config.MOTOR_PIN, machine.Pin.OUT)
+    pwm_motor = machine.PWM(pin_motor)
+    pwm_motor.duty(768)
+    utime.sleep(1)
+    pwm_motor.deinit()
 
 def run(tm=None):
     lfp=None
     sleep_seconds=0
+   
+    #First of all check if we are to continue sleeping
+    if machine.reset_cause == machine.DEEPSLEEP_RESET:
+        deepsleep()
+    
     try:
         lfp=open(config.LOGFILE, 'r+') #Open log file
         log_me(lfp, "Wakes up and run()",1)
@@ -213,7 +236,7 @@ def run(tm=None):
         log_me(lfp, "Current status: {}".format(status),1)
         next_state= 'Opened' if status[1] is 'Closed' else 'Closed' #Binary states
 
-        if machine.reset_cause() in [ machine.DEEPSLEEP_RESET, machine.PWRON_RESET, machine.HARD_RESET, 
+        if machine.reset_cause() in [ machine.PWRON_RESET, machine.HARD_RESET, 
                                     machine.WDT_RESET, machine.SOFT_RESET ]: #We are resetted or first started
             connect_wifi(lfp)
             set_time()
@@ -252,6 +275,7 @@ def run(tm=None):
         
     finally:
         disconnect_wifi(lfp)
+        stop_gate(lfp)
         lfp.close()
         if not is_debug():
             deepsleep(sleep_seconds)

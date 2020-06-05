@@ -17,13 +17,9 @@ DOOR_TIME= 55 #45 #40
 FILENAME= 'door_state.txt'
 LOGFILE= 'weekly_log.txt'
 LOGLEVEL=1
+DEEP_SLEEP= 3600
 WEEK_DAYS= ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
             #open, close
-TIMINGS=  ( (7.8, 33000, 53400), #dec-feb
-            (7.8, 40200, 46200), #mar-may
-            (6.5, 55800, 30600), #jun-aug
-            (7.8, 40200, 46200)) #sep-nov
-            #Timings is (opening time, seconds open, seconds Closed)
 
 TIMINGS2= ( ('dummy', 0, 0.0, 0, 86400.0),
     ( 'jan', 7.5, 34200.0, 17.0, 52200.0 ),
