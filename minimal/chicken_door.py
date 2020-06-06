@@ -1,72 +1,9 @@
-# /Users/backis/Projects/micropython-tutorial/minimal/main.py
+# /Users/backis/Projects/micropython-tutorial/minimal/chicken_door.py
 import machine
 import config
-import uos
 import utime
-
-""" def get_time():
-    import utime
-    #Adjust the time to avoid drift
-    tm=utime.localtime() #In UTC
-    def my_summer_time(tm):
-        if ( (tm[1]==3 && tm[6]==6 && tm[2]>24) && (tm[1]==10 && tm[6]==6 && tm[2]>24) ):
-            print("+2h")
-        else
-            print("+1h")
-    
-    if ( (tm[1]>3 and tm[1]<10) or (tm[3] and (31-tm[2]) < (6-tm[6])) or (tm[3] and tm[2]==31 and tm[6]==6) ):
-        print("+2h")
-    else if  
-     or (tm[1]==3 and tm[6]<6 and tm[2]>24) or  (tm[1]==10 and tm[6]<6 and tm[2]<24) ):
-
-
-    
-    ltime= utime.mktime((tm[0], tm[1], tm[2], tm[3]+1, tm[4], tm[5], tm[6], tm[7])) #Adds one hour from UTC
-    return utime.localtime(ltime) """
-
-def get_local_time():
-    #Adjust the time to avoid drift
-    tm=utime.localtime() #In UTC
-    add_hour=1
-    if( (tm[1]>3 and tm[1]<10) or ( (31-tm[2])<= 6 and (tm[6]< 6-(31-tm[2]) or tm[6]==6) ) ): #Summer time
-        add_hour=2
-    ltime= utime.mktime((tm[0], tm[1], tm[2], tm[3]+add_hour, tm[4], tm[5], tm[6], tm[7])) #Adds one/two hour from UTC
-    return utime.localtime(ltime)
-
-def set_time():
-    import ntptime
-    ntptime.settime()
-
-def connect_wifi(lfp):
-    import network
-    ap_if = network.WLAN(network.AP_IF)
-    ap_if.active(False)
-    sta_if = network.WLAN(network.STA_IF)
-    if not sta_if.isconnected():
-        log_me(lfp, 'Connecting to WiFi...')
-        sta_if.active(True)
-        sta_if.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
-        counter=0
-        while not sta_if.isconnected():
-            utime.sleep(1)
-            counter+=1
-            if counter > 14:
-                raise RuntimeError('WLAN connection unavailable')
-        log_me(lfp,'Network config: {}'.format( sta_if.ifconfig()))
-
-def disconnect_wifi(lfp):
-    import network
-    sta_if = network.WLAN(network.STA_IF)
-    if sta_if.isconnected():
-        log_me(lfp, 'Disconnecting from WiFi...')
-        sta_if.active(False)
-
-def is_debug():
-    debug = machine.Pin(config.DEBUG_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
-    if debug.value() == 0:
-        print('Debug mode detected.')
-        return True
-    return False
+import mynetwork
+import utils
 
 def get_temperature_and_humidity():
     import dht
@@ -99,7 +36,7 @@ def adjusted_sleep(lfp, time_now, month, direction):
     time_now_secs= utime.mktime(time_now)
     this_morning_secs = utime.mktime(this_morning)
     this_evening_secs= utime.mktime(this_evening)
-    log_me(lfp,"time_now_secs:{} this_morning_secs:{} this_evening_secs:{}".format(time_now_secs, this_morning_secs, this_evening_secs))
+    utils.log_me(lfp,"time_now_secs:{} this_morning_secs:{} this_evening_secs:{}".format(time_now_secs, this_morning_secs, this_evening_secs))
     if  time_now_secs < this_morning_secs:
         next_timing= this_morning_secs - time_now_secs + schedule[2] if direction is 'Opened' else this_morning_secs - time_now_secs
     elif time_now_secs >= this_morning_secs and time_now_secs < this_evening_secs:
@@ -107,7 +44,7 @@ def adjusted_sleep(lfp, time_now, month, direction):
     else:
         next_timing = schedule[4] - (time_now_secs - this_evening_secs) + schedule[2] if direction is 'Opened' else schedule[4]- (time_now_secs - this_evening_secs) 
 
-    log_me(lfp,"Direction:{} and this_morning: {} and time_now: {} and schedule:{}".format(direction, this_morning, time_now, schedule[0]) )
+    utils.log_me(lfp,"Direction:{} and this_morning: {} and time_now: {} and schedule:{}".format(direction, this_morning, time_now, schedule[0]) )
     return next_timing
 
 def calculate_sleep_time(lfp, direction, time_now=None):
@@ -118,7 +55,7 @@ def calculate_sleep_time(lfp, direction, time_now=None):
         month=int(status[0]) #Reading from file
 
         sleep_until= adjusted_sleep(lfp, time_now, month, direction) #Get the time from now to the next open/close event
-        log_me(lfp,"Sleeping after adjustment for {sleep} seconds".format(sleep=sleep_until),1 )
+        utils.log_me(lfp,"Sleeping after adjustment for {sleep} seconds".format(sleep=sleep_until),1 )
         
         if (time_now[6]==6 and time_now[2] < 8 and direction is 'Closed'): #Mon=0..Sun=6
             #write new timing to file
@@ -134,68 +71,46 @@ def calculate_sleep_time(lfp, direction, time_now=None):
 
     return sleep_until
     
-def log_me(lfp, message, log=0):
-    tm=get_local_time()
-    tm_str= '-'.join(map(str, tm[0:3]))+'T'+':'.join(map(str, tm[3:6]))
-    if is_debug():
-        print('@{}: {}\n'.format(tm_str, message))
-    elif log >= config.LOGLEVEL:
-        lfp.seek(0,2) #End of file
-        lfp.write('@{}: {}\n'.format(tm_str, message))
-
-def rename_file(lfp):
-    log_me(lfp, "Renaming file")
-    lfp.close()
-    uos.rename(config.LOGFILE, config.LOGFILE[:-3]+'bak')
-    lfp=open(config.LOGFILE, 'w') #Erase file
-    lfp.close()
-    lfp=open(config.LOGFILE, 'r+')
-    log_me(lfp, "File renamed")
-    return lfp
-    #uos.sync()
-
-def send_logfile(lfp):
-    import urequests
-    log_me(lfp, 'Invoking webhook in send_logfile')
-    lfp.flush()
-    lfp.seek(0,0) #Goto first of first line in file
-    reason=lfp.read() #read all lines
-    response = urequests.post(config.WEBHOOK_URL,
-                              json={'value1': reason})
-    if response is not None and response.status_code < 400:
-        log_me(lfp,'Webhook invoked',1)
+def deepsleep_util(seconds=None):
+    rtc = machine.RTC()
+    if seconds: #We are called for the first time 
+        if seconds > config.DEEP_SLEEP:
+            rtc.memory(b'{}'.format(seconds))
     else:
-        log_me(lfp, 'Webhook failed',1)
-        raise RuntimeError('Webhook failed')
-
+        rtc.memory(str(int(rtc.memory())-config.DEEP_SLEEP)) #We already slept for config.DEEP_SLEEP
+        seconds = int(rtc.memory())
+    
+    if seconds <= 0:
+        return
+    
+    if seconds > config.DEEP_SLEEP: #with value greater than config.DEEP_SLEEP
+        time_to_sleep=config.DEEP_SLEEP
+    else: 
+        time_to_sleep=seconds
+    return time_to_sleep
 
 def deepsleep(seconds=None):
-    #log_me(lfp, 'Going into deepsleep for {seconds} seconds...'.format(seconds=seconds))
+    #utils.log_me(lfp, 'Going into deepsleep for {seconds} seconds...'.format(seconds=seconds))
     #Needs to keep track of max sleep time ~71 min
+    if seconds:
+        time_to_sleep=deepsleep_util(seconds)
+    else:
+        time_to_sleep=deepsleep_util()
+
     rtc = machine.RTC()
-    if seconds: #We are called for the first time
-        rtc.memory(b'{}'.format(seconds))
-    else:
-        time_to_sleep=rtc.memory(str(int(rtc.memory())-config.DEEP_SLEEP)) #We already slept for config.DEEP_SLEEP
-
-    if time_to_sleep < config.DEEP_SLEEP:
-        rtc.memory(b'')
-    else:
-        time_to_sleep=config.DEEP_SLEEP
-
     rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
     rtc.alarm(rtc.ALARM0, time_to_sleep * 1000)
     machine.deepsleep()
 
 def run_gate(lfp, next_state):
     #Initialize
-    log_me(lfp, "starting motor! and {}".format(next_state),1)
+    utils.log_me(lfp, "starting motor! and {}".format(next_state),1)
     pin_motor = machine.Pin(config.MOTOR_PIN, machine.Pin.OUT)
     pin_dir= machine.Pin(config.MOTOR_DIR, machine.Pin.OUT) #Rotation direction
     pwm_motor = machine.PWM(pin_motor)
     pwm_motor.freq(config.PWM_FREQ)
     
-    my_door_time = (config.DOOR_TIME-40) if is_debug() else config.DOOR_TIME
+    my_door_time = (config.DOOR_TIME-40) if utils.is_debug() else config.DOOR_TIME
 
     if next_state is 'Closed':
         pin_dir.off() #Closing
@@ -212,7 +127,7 @@ def run_gate(lfp, next_state):
     return True
 
 def stop_gate(lfp):
-    log_me(lfp, "Stopping motor!",1)
+    utils.log_me(lfp, "Stopping motor!",1)
     pin_motor = machine.Pin(config.MOTOR_PIN, machine.Pin.OUT)
     pwm_motor = machine.PWM(pin_motor)
     pwm_motor.duty(768)
@@ -229,54 +144,54 @@ def run(tm=None):
     
     try:
         lfp=open(config.LOGFILE, 'r+') #Open log file
-        log_me(lfp, "Wakes up and run()",1)
-        time_now=tm if tm else get_local_time() #Set to local time if no other time provided
+        utils.log_me(lfp, "Wakes up and run() after:{}".format(machine.reset_cause()),1)
+        time_now=tm if tm else utils.get_local_time() #Set to local time if no other time provided
         #Check current status 
         status= current_status(config.FILENAME)
-        log_me(lfp, "Current status: {}".format(status),1)
+        utils.log_me(lfp, "Current status: {}".format(status),1)
         next_state= 'Opened' if status[1] is 'Closed' else 'Closed' #Binary states
 
         if machine.reset_cause() in [ machine.PWRON_RESET, machine.HARD_RESET, 
                                     machine.WDT_RESET, machine.SOFT_RESET ]: #We are resetted or first started
-            connect_wifi(lfp)
-            set_time()
-            send_logfile(lfp)  #Send log
-            lfp=rename_file(lfp)
+            mynetwork.connect_wifi(lfp)
+            mynetwork.set_time()
+            mynetwork.send_logfile(lfp)  #Send log
+            lfp=utils.rename_file(lfp)
             #Open the door if closed
             #if next_state is 'Opened': #Run gate up if closed
             run_gate(lfp, next_state)
             current_status(config.FILENAME, next_state) #Set new state in file only if successfully run_gate()
             #Sleep to next scheduled event
-            sleep_seconds= calculate_sleep_time(lfp, next_state, get_local_time())
-            #seconds=sleep_until(lfp, next_state, get_local_time())
+            sleep_seconds= calculate_sleep_time(lfp, next_state, utils.get_local_time())
+            #seconds=sleep_until(lfp, next_state, utils.get_local_time())
             
         else: #Wake up from deepsleep
             temperature, humidity = get_temperature_and_humidity()
-            log_me(lfp, 'Temperature = {temperature}, Humidity = {humidity}'.format(
+            utils.log_me(lfp, 'Temperature = {temperature}, Humidity = {humidity}'.format(
             temperature=temperature, humidity=humidity))
 
             if run_gate(lfp, next_state): #Run gate up or down
                 current_status(config.FILENAME, next_state) #Set new state in file only if successfully run_gate()
 
             if time_now[6] == 6 and next_state is 'Closed': #It's sunday evening after closing
-                connect_wifi(lfp)
-                set_time()
-                send_logfile(lfp)
-                rename_file(lfp)
-                sleep_seconds= calculate_sleep_time(lfp, next_state, get_local_time())
+                mynetwork.connect_wifi(lfp)
+                mynetwork.set_time()
+                mynetwork.send_logfile(lfp)
+                utils.rename_file(lfp)
+                sleep_seconds= calculate_sleep_time(lfp, next_state, utils.get_local_time())
 
             sleep_seconds= calculate_sleep_time(lfp, next_state)
     except Exception as exc:
         import sys
-        log_me(lfp, "Exception: {}".format(exc), 5)
+        utils.log_me(lfp, "Exception: {}".format(exc), 5)
         sys.print_exception(exc, lfp)
-        connect_wifi(lfp)
-        send_logfile(lfp)
+        mynetwork.connect_wifi(lfp)
+        mynetwork.send_logfile(lfp)
         
     finally:
-        disconnect_wifi(lfp)
+        mynetwork.disconnect_wifi(lfp)
         stop_gate(lfp)
         lfp.close()
-        if not is_debug():
+        if not utils.is_debug():
             deepsleep(sleep_seconds)
 #run()

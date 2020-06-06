@@ -1,6 +1,7 @@
 import chicken_door as main
 import config
 import utime
+import utils
 
 lfp=open(config.LOGFILE, 'r+')
 time_now=(2020, 5, 4, 14, 54, 5, 6, 135)
@@ -47,13 +48,13 @@ lfpw.close()
 
 with open(config.LOGFILE, 'r+') as lfp:
     lfp.write('first line\nsecond line\n')
-    main.rename_file(lfp)
+    utils.rename_file(lfp)
     a=uos.stat('weekly_log.bak')[6] - uos.stat('weekly_log.txt')[6]
     assert a == 23, print('a is {}'.format(a))
 
 
 with open(config.LOGFILE, 'r+') as lfp:
-    main.log_me(lfp, "First line\nSecond line")
+    utils.log_me(lfp, "First line\nSecond line")
     lfp.seek(0,0)
     a=lfp.read()
     assert a[-23:-1] in "First line\nSecond line", print('a is {}'.format(a))
