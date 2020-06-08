@@ -16,7 +16,7 @@ PWM_FREQ=50
 DOOR_TIME= 55 #45 #40
 FILENAME= 'door_state.txt'
 LOGFILE= 'weekly_log.txt'
-LOGLEVEL=1
+LOGLEVEL=0
 DEEP_SLEEP= 3600
 WEEK_DAYS= ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
             #open, close

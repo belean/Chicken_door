@@ -73,34 +73,32 @@ def calculate_sleep_time(lfp, direction, time_now=None):
     
 def deepsleep_util(seconds=None):
     rtc = machine.RTC()
-    if seconds: #We are called for the first time 
-        if seconds > config.DEEP_SLEEP:
-            rtc.memory(b'{}'.format(seconds))
+    if not seconds: #We are not called for the first time
+        remaining_time=0 if rtc.memory()==b'' else int(rtc.memory())
+        seconds = remaining_time-config.DEEP_SLEEP #We already slept for config.DEEP_SLEEP
+    
+    if seconds > config.DEEP_SLEEP:
+        rtc.memory(b'{}'.format(seconds))
+        return config.DEEP_SLEEP
     else:
-        rtc.memory(str(int(rtc.memory())-config.DEEP_SLEEP)) #We already slept for config.DEEP_SLEEP
-        seconds = int(rtc.memory())
-    
-    if seconds <= 0:
-        return
-    
-    if seconds > config.DEEP_SLEEP: #with value greater than config.DEEP_SLEEP
-        time_to_sleep=config.DEEP_SLEEP
-    else: 
-        time_to_sleep=seconds
-    return time_to_sleep
+        rtc.memory(b'') #Reset the counter
+        return seconds if seconds > 0 else 0
 
 def deepsleep(seconds=None):
     #utils.log_me(lfp, 'Going into deepsleep for {seconds} seconds...'.format(seconds=seconds))
     #Needs to keep track of max sleep time ~71 min
     if seconds:
-        time_to_sleep=deepsleep_util(seconds)
+        time_to_sleep=deepsleep_util(seconds) #1st run
     else:
-        time_to_sleep=deepsleep_util()
+        time_to_sleep=deepsleep_util() #Repeat
 
-    rtc = machine.RTC()
-    rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
-    rtc.alarm(rtc.ALARM0, time_to_sleep * 1000)
-    machine.deepsleep()
+    if time_to_sleep >= 0:
+        return 0 #No need for sleep
+    else:
+        rtc = machine.RTC()
+        rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
+        rtc.alarm(rtc.ALARM0, (time_to_sleep+1) * 1000) #Avoid zero sleeping time
+        machine.deepsleep()
 
 def run_gate(lfp, next_state):
     #Initialize
