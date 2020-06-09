@@ -87,17 +87,23 @@ def deepsleep_util(seconds=None):
 def deepsleep(seconds=None):
     #utils.log_me(lfp, 'Going into deepsleep for {seconds} seconds...'.format(seconds=seconds))
     #Needs to keep track of max sleep time ~71 min
+    #lfp=open(config.LOGFILE, 'r+')
     if seconds:
+        utils.log_me(lfp, 'Seconds: {}'.format(seconds))
         time_to_sleep=deepsleep_util(seconds) #1st run
     else:
         time_to_sleep=deepsleep_util() #Repeat
+    
+    #utils.log_me(lfp, 'time_to_sleep: {}'.format(time_to_sleep))
 
-    if time_to_sleep >= 0:
-        return 0 #No need for sleep
+    if time_to_sleep <= 300:
+        #lfp.close()
+        return 0 #No need for sleep if we only have 300 seconds left
     else:
         rtc = machine.RTC()
         rtc.irq(trigger=rtc.ALARM0, wake=machine.DEEPSLEEP)
-        rtc.alarm(rtc.ALARM0, (time_to_sleep+1) * 1000) #Avoid zero sleeping time
+        rtc.alarm(rtc.ALARM0, time_to_sleep * 1000) #Avoid zero sleeping time
+        #lfp.close() #Closing before deeepsleep
         machine.deepsleep()
 
 def run_gate(lfp, next_state):
@@ -137,7 +143,7 @@ def run(tm=None):
     sleep_seconds=0
    
     #First of all check if we are to continue sleeping
-    if machine.reset_cause == machine.DEEPSLEEP_RESET:
+    if machine.reset_cause() == machine.DEEPSLEEP_RESET:
         deepsleep()
     
     try:
@@ -160,7 +166,7 @@ def run(tm=None):
             run_gate(lfp, next_state)
             current_status(config.FILENAME, next_state) #Set new state in file only if successfully run_gate()
             #Sleep to next scheduled event
-            sleep_seconds= calculate_sleep_time(lfp, next_state, utils.get_local_time())
+            sleep_seconds= calculate_sleep_time(lfp, next_state, tm)
             #seconds=sleep_until(lfp, next_state, utils.get_local_time())
             
         else: #Wake up from deepsleep
@@ -176,7 +182,7 @@ def run(tm=None):
                 mynetwork.set_time()
                 mynetwork.send_logfile(lfp)
                 utils.rename_file(lfp)
-                sleep_seconds= calculate_sleep_time(lfp, next_state, utils.get_local_time())
+                sleep_seconds= calculate_sleep_time(lfp, next_state, tm)
 
             sleep_seconds= calculate_sleep_time(lfp, next_state)
     except Exception as exc:
