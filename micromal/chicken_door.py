@@ -55,10 +55,10 @@ def deep_sleep(schedule=None):
             fw.seek(0, 0)
             fw.write(','.join(state))
 
-    if(int(state[1]) == int(state[2])-1):
+    elif(int(state[1]) == int(state[2])-1):
         # The time is up for an event
         log.log_me("and time for event!", 1)
-        state[1] = str(int(state[1]) + 1)
+        state[1] = str(int(state[1])+1)
         rtc.memory(','.join(state))  # Write string to rtc memory
         return
 
@@ -112,7 +112,8 @@ def run_gate(state):
         pwm_motor.duty(config.PWM_DUTY)
         utime.sleep(my_door_time)
     else:
-        raise RuntimeError("We are neither open or closed",3)
+        raise RuntimeError("We are neither open or closed", 3)
+
     pwm_motor.duty(768)
     utime.sleep(1)
     pwm_motor.deinit()
