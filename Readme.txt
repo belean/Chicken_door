@@ -1,3 +1,10 @@
+2020-12-07 Mikael:
+Skrev om och skapade micromal med en reducerad funktion. 
+1. Koppla upp ESP8266 med microusb.
+2. initiera rshell --port /dev/cu.SLAB_USBtoUART och resetta för att avbryta deep_sleep
+3. controllera /pyboard/door_state.txt och machine.RTC().memory() De bör vara liknande
+4. För att få den att somna om kör machine.reset() för en soft reset. Då initieas den och somnar
+
 2020-04-26 Mikael:
 Tänker om för att spara batteriet. Nu gäller att koppla upp wifi en gång i veckan på söndag vid stängning. Då ges
 spelregler för nästkommade vecka. Från uppvaknande gäller:
