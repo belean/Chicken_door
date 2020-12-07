@@ -38,3 +38,28 @@ def is_debug():
         print('Debug mode detected.')
         return True
     return False
+
+def sync_file():
+    """Syncronizes files from rtc and filesystem. Since rtc erases after
+    no battery we use the saved filesystem values"""
+    # state=['312','16','19','Open']
+    state=list() #init
+    tm=get_local_time() #get current time
+    with open(config.FILENAME, 'r') as f:
+        f.seek(0,0)
+        state= f.read().split(',')
+    state[0]=str(tm[7]) #Update day
+    state[1]=str(tm[3]) #and hour
+    # write to rtc memory
+    rtc=machine.RTC()
+    rtc.memory(','.join(state))
+    return state
+
+    #write to file
+    with open(config.FILENAME, 'w') as fw:
+        fw.seek(0,0)
+        fw.write(','.join(state))
+
+def out_of_sync(state):
+    """ Check if we can have missed an event """
+    day=int(state[0])
