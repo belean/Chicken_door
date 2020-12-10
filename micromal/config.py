@@ -7,7 +7,7 @@ class Config:
         self.MOTOR_DIR = 0  # D3
         self.PWM_DUTY = 1023
         self.PWM_FREQ = 50
-        self.DOOR_TIME = 55  # 45 #40
+        self.DOOR_TIME = 50  # 45 #40
         self.FILENAME = 'door_state.txt'
         self.DEEP_SLEEP = 3600
         self.TIMINGS2 = (7, 19)  # open, close

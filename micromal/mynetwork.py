@@ -18,7 +18,7 @@ def set_time():
             ntptime.settime()
             success = True
         except Exception as exc:
-            log.log_me("   Exception: {}".format(exc.args[0]), 3)
+            log.log_me("   Exception: {}".format(exc), 3)
             if count > 12:
                 raise RuntimeError('ntptime unavailable')
             utime.sleep(5)
